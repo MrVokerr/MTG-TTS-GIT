@@ -4,7 +4,7 @@
 
 mod_name,version='Card Importer',3.9
 self.setName('[854FD9]'..mod_name..' [49D54F]'..version)
-author,WorkshopID,GITURL='76561198045776458','https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998','https://raw.githubusercontent.com/MrVokerr/MTG-TTS-stuff/main/Scripts/Card%20Importer.lua'
+author,WorkshopID,GITURL='76561197991782511','https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998','https://raw.githubusercontent.com/MrVokerr/MTG-TTS-GIT/refs/heads/main/Card_Importer.lua'
 coauthor='76561197968157267'--PIE
 lang='en'
 --[[Classes]]
