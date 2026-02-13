@@ -2,10 +2,9 @@
 --Heavily adapted by Pie to his table https://steamcommunity.com/sharedfiles/filedetails/?id=2296042369
 --Further updated by Vokerr to use rikrassen's server as the backend https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998
 
-mod_name,version='Card Importer',3.9
+mod_name,version='Card Importer',4.1
 self.setName('[854FD9]'..mod_name..' [49D54F]'..version)
-author,WorkshopID,GITURL='76561197991782511','https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998','https://raw.githubusercontent.com/MrVokerr/MTG-TTS-GIT/refs/heads/main/Card_Importer.lua' --Vokerr
-original_author='76561198045776458'--Amuzet
+author,WorkshopID,GITURL='76561198045776458','https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998','https://raw.githubusercontent.com/MrVokerr/MTG-TTS-stuff/main/Scripts/Card%20Importer.lua'
 coauthor='76561197968157267'--PIE
 lang='en'
 --[[Classes]]
@@ -125,8 +124,12 @@ function RikksanSpawn(lines, qTbl, useNewEndpoint, skipTokens)
               -- Force Face Up (Z=0 in TTS is Face Up)
               if obj then
                  Wait.time(function()
-                    local currentRot = obj.getRotation()
-                    obj.setRotation({currentRot.x, currentRot.y, 0})
+                    pcall(function()
+                      if obj and not obj.isDestroyed() then
+                        local currentRot = obj.getRotation()
+                        obj.setRotation({currentRot.x, currentRot.y, 0})
+                      end
+                    end)
                  end, 0.3)
               end
             end
@@ -751,7 +754,7 @@ for s in('mid vow'):gmatch('%S+')do--Crimson Moon
   Booster[s]=function(p)local n=math.random(#p-1,#p)for i,v in pairs(p)do if i==6 or i==n then p[i]=p[i]..'+is:transform'else p[i]=p[i]..'+-is:transform'end end return p end end
 for s in('cns cn2'):gmatch('%S+')do
   Booster[s]=function(p)return rSlot(p,s,'+-wm:conspiracy','+wm:conspiracy')end end
-for s in('rav gpt dis rtr gtc dgm grn rna'):gmatch('%S+')do
+for s in('rav gpt disk rtr gtc dgm grn rna'):gmatch('%S+')do
   Booster[s]=function(p)return rSlot(p,s,'+-t:land','+t:land+-t:basic')end end
 for s in('ice all csp mh1 khm'):gmatch('%S+')do
   Booster[s]=function(p)p[6]=apiSet..s..'+t:basic+t:snow'return p end end
@@ -930,6 +933,22 @@ Importer=setmetatable({
     ScryfallGet('https://api.scryfall.com/cards/search?q='..qTbl.name,function(wr)
         spawnList(wr,qTbl)end)end,
 
+  Front=function(qTbl)
+    if qTbl.target then
+      local custom = qTbl.target.getCustomObject()
+      if custom and custom.face then
+        custom.face = qTbl.url
+        qTbl.target.setCustomObject(custom)
+        qTbl.target.reload()
+        Player[qTbl.color].broadcast('Card Front set to\n'..qTbl.url,{0.9,0.9,0.9})
+      else
+        Player[qTbl.color].broadcast('Target is not a custom card.',{1,0,0})
+      end
+    else
+      Player[qTbl.color].broadcast('You must be hovering over a card to use "Scryfall Front"',{1,0,0})
+    end
+    endLoop()end,
+
   Back=function(qTbl)
     if qTbl.target then qTbl.url=qTbl.target.getJSON():match('BackURL": "([^"]*)"')end
     Back[qTbl.player]=qTbl.url
@@ -939,6 +958,10 @@ Importer=setmetatable({
   Spawn=function(qTbl)
     -- Use Scryfall to identify the card first (handles fuzzy, syntax, etc)
     ScryfallGet('https://api.scryfall.com/cards/named?fuzzy='..qTbl.name,function(wr)
+        if Card.image then
+          setCard(wr, qTbl)
+          return
+        end
         local obj=safeJSON(wr.text)
         if not obj or obj.object == 'error' then 
           -- If fuzzy fail, try search (e.g. for advanced syntax)
@@ -987,8 +1010,9 @@ Importer=setmetatable({
             table.insert(parts, part)
           end
           if #parts >= 4 then
+            local cleanName = parts[2]:match("([^\n]+)") or parts[2]
             table.insert(cachedTokens, {
-              name = parts[2],
+              name = cleanName,
               set = parts[3],
               collector = parts[4]
             })
@@ -1081,8 +1105,9 @@ Importer=setmetatable({
                         spawnCount = spawnCount + 1
                         -- Extract token info for caching
                         if cardData.Nickname then
+                          local cleanTokenName = cardData.Nickname:match("([^\n]+)") or cardData.Nickname
                           local tokenInfo = {
-                            name = cardData.Nickname,
+                            name = cleanTokenName,
                             set = "TOKEN",
                             collector = "1"
                           }
@@ -1097,22 +1122,25 @@ Importer=setmetatable({
               -- Cache token data to source card tags
               if #tokenData > 0 and qTbl.target then
                 Wait.time(function()
-                  local existingTags = qTbl.target.getTags()
-                  local newTags = {}
-                  
-                  -- Keep non-token tags
-                  for _, tag in ipairs(existingTags) do
-                    if not tag:find("^token:") then
-                      table.insert(newTags, tag)
+                  pcall(function()
+                    if not qTbl.target or qTbl.target.isDestroyed() then return end
+                    local existingTags = qTbl.target.getTags()
+                    local newTags = {}
+                    
+                    -- Keep non-token tags
+                    for _, tag in ipairs(existingTags) do
+                      if not tag:find("^token:") then
+                        table.insert(newTags, tag)
+                      end
                     end
-                  end
-                  
-                  -- Add new token tags
-                  for _, token in ipairs(tokenData) do
-                    table.insert(newTags, "token:" .. token.name .. ":" .. token.set .. ":" .. token.collector)
-                  end
-                  
-                  qTbl.target.setTags(newTags)
+                    
+                    -- Add new token tags
+                    for _, token in ipairs(tokenData) do
+                      table.insert(newTags, "token:" .. token.name .. ":" .. token.set .. ":" .. token.collector)
+                    end
+                    
+                    qTbl.target.setTags(newTags)
+                  end)
                 end, 0.5)
               end
               
@@ -1148,8 +1176,9 @@ Importer=setmetatable({
                   spawnCount = spawnCount + 1
                   -- Extract token info for caching
                   if cardData.Nickname then
+                    local cleanTokenName = cardData.Nickname:match("([^\n]+)") or cardData.Nickname
                     local tokenInfo = {
-                      name = cardData.Nickname,
+                      name = cleanTokenName,
                       set = "TOKEN",
                       collector = "1"
                     }
@@ -1164,22 +1193,25 @@ Importer=setmetatable({
         -- Cache token data to source card tags
         if #tokenData > 0 and qTbl.target then
           Wait.time(function()
-            local existingTags = qTbl.target.getTags()
-            local newTags = {}
-            
-            -- Keep non-token tags
-            for _, tag in ipairs(existingTags) do
-              if not tag:find("^token:") then
-                table.insert(newTags, tag)
+            pcall(function()
+              if not qTbl.target or qTbl.target.isDestroyed() then return end
+              local existingTags = qTbl.target.getTags()
+              local newTags = {}
+              
+              -- Keep non-token tags
+              for _, tag in ipairs(existingTags) do
+                if not tag:find("^token:") then
+                  table.insert(newTags, tag)
+                end
               end
-            end
-            
-            -- Add new token tags
-            for _, token in ipairs(tokenData) do
-              table.insert(newTags, "token:" .. token.name .. ":" .. token.set .. ":" .. token.collector)
-            end
-            
-            qTbl.target.setTags(newTags)
+              
+              -- Add new token tags
+              for _, token in ipairs(tokenData) do
+                table.insert(newTags, "token:" .. token.name .. ":" .. token.set .. ":" .. token.collector)
+              end
+              
+              qTbl.target.setTags(newTags)
+            end)
           end, 0.5)
         end
         
@@ -1543,10 +1575,10 @@ function onChat(msg,p)
 "76561198015252567":"https://static.wikia.nocookie.net/mtgsalvation_gamepedia/images/5/5c/Cardback_reimagined.png",
 "76561198237455552":"https://i.imgur.com/FhwK9CX.jpg",
 "76561198041801580":"https://earthsky.org/upl/2015/01/pillars-of-creation-2151.jpg",
-"76561198052971595":"http://cloud-3.steamusercontent.com/ugc/1653343413892121432/2F5D3759EEB5109D019E2C318819DEF399CD69F9/",
-"76561198053151808":"http://cloud-3.steamusercontent.com/ugc/1289668517476690629/0D8EB10F5D7351435C31352F013538B4701668D5/",
+"76561198052971595":"https://steamusercontent-a.akamaihd.net/ugc/1653343413892121432/2F5D3759EEB5109D019E2C318819DEF399CD69F9/",
+"76561198053151808":"https://steamusercontent-a.akamaihd.net/ugc/1289668517476690629/0D8EB10F5D7351435C31352F013538B4701668D5/",
 "76561197984192849":"https://i.imgur.com/JygQFRA.png",
-"76561197975480678":"http://cloud-3.steamusercontent.com/ugc/772861785996967901/6E85CE1D18660E60849EF5CEE08E818F7400A63D/",
+"76561197975480678":"https://steamusercontent-a.akamaihd.net/ugc/772861785996967901/6E85CE1D18660E60849EF5CEE08E818F7400A63D/",
 "76561198000043097":"https://i.imgur.com/rfQsgTL.png",
 "76561198025014348":"https://i.imgur.com/pPnIKhy.png",
 "76561198045241564":"http://i.imgur.com/P7qYTcI.png",
@@ -1560,7 +1592,7 @@ function onChat(msg,p)
 
     elseif a then
       --pieHere, allow using spaces instead of + when doing search syntax, also allow ( ) grouping
-      local tbl={position=p.getPointerPosition(),player=p.steam_id,color=p.color,url=a:match('(http%S+)'),mode=a:gsub('(http%S+)',''):match('(%S+)'),name=a:gsub('(http%S+)',''),full=a}
+      local tbl={position=p.getPointerPosition(),target=p.getHoverObject(),player=p.steam_id,color=p.color,url=a:match('(http%S+)'),mode=a:gsub('(http%S+)',''):match('(%S+)'),name=a:gsub('(http%S+)',''),full=a}
       if tbl.color=='Grey' then
         tbl.position={0,2,0}
       end
