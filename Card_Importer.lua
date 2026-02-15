@@ -2,7 +2,7 @@
 --Heavily adapted by Pie to his table https://steamcommunity.com/sharedfiles/filedetails/?id=2296042369
 --Further updated by Vokerr to use rikrassen's server as the backend https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998
 
-mod_name,version='Card Importer',4.1
+mod_name,version='Card Importer',4.2
 self.setName('[854FD9]'..mod_name..' [49D54F]'..version)
 author,WorkshopID,GITURL='76561198045776458','https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998','https://raw.githubusercontent.com/MrVokerr/MTG-TTS-stuff/main/Scripts/Card%20Importer.lua'
 coauthor='76561197968157267'--PIE
@@ -726,10 +726,7 @@ local Booster=setmetatable({
       for i=1,3 do table.insert(pack,u..'r:uncommon')end
       table.insert(pack,u..rarity(8,1))
       return pack end end})
---ReplacementSlot
-function rSlot(p,s,a,b)for i,v in pairs(p)do if i~=6 then p[i]=v..a else p[i]=apiSet..s..'+'..rarity()..b end end return p end
---Weird Boosters
-Booster['tsr']=function(p)p[11]=p[9]:gsub('is:booster+r:common','r:special')return p end
+Booster['tsp']=function(p)p[11]=p[9]:gsub('is:booster+r:common','r:special')return p end
 Booster['unf']=function(p)local j=rSlot(p,'unf','+-t:Attraction','+t:Attraction')
   table.insert(j,j[6])return j end
 Booster['ust']=function(p)local j=rSlot(p,'ust','+-t:Contraption','+t:Contraption')
@@ -995,44 +992,6 @@ Importer=setmetatable({
     end)end,
 
   Token=function(qTbl)
-    -- HYBRID APPROACH: Check tags first, then API
-    
-    -- Step 1: Check if we have cached token data in card tags
-    if qTbl.target then
-      local tags = qTbl.target.getTags()
-      local cachedTokens = {}
-      
-      for _, tag in ipairs(tags) do
-        -- Tag format: "token:Name:Set:CollectorNum"
-        if tag:find("^token:") then
-          local parts = {}
-          for part in tag:gmatch("([^:]+)") do
-            table.insert(parts, part)
-          end
-          if #parts >= 4 then
-            local cleanName = parts[2]:match("([^\n]+)") or parts[2]
-            table.insert(cachedTokens, {
-              name = cleanName,
-              set = parts[3],
-              collector = parts[4]
-            })
-          end
-        end
-      end
-      
-      -- If we found cached tokens, spawn them directly (0 API calls!)
-      if #cachedTokens > 0 then
-        local lines = {}
-        for _, token in ipairs(cachedTokens) do
-          table.insert(lines, "1 " .. token.name .. " (" .. token.set .. ") " .. token.collector)
-        end
-        Player[qTbl.color].broadcast('Spawning ' .. #cachedTokens .. ' cached token(s)...', {0.5, 1, 0.8})
-        RikksanSpawn(lines, qTbl, true)
-        return
-      end
-    end
-    
-    -- Step 2: No cached data - use Rikrassen's API
     local playerBack = Back[qTbl.player]
     if not playerBack or playerBack == '' then playerBack = Back['___'] end
     
@@ -1069,7 +1028,6 @@ Importer=setmetatable({
       ['X-Client-Version'] = '0.9.1'
     }, function(wr)
         if wr.is_error then
-          -- Try old endpoint as fallback
           endpoint = 'https://importer-m7vpzqazfa-uc.a.run.app/build'
           WebRequest.custom(endpoint, 'POST', true, payloadJson, {
             ['Content-Type'] = 'application/json',
@@ -1081,142 +1039,30 @@ Importer=setmetatable({
                 return
               end
               
-              -- Process fallback response - skip first result (main card), spawn rest (tokens)
-              local spawnCount = 0
-              local errorCount = 0
-              local tokenData = {} -- For caching
               local lineIndex = 0
-              
               for line in wr2.text:gmatch("[^\r\n]+") do
-                if line:find('"error"') then
-                  errorCount = errorCount + 1
-                  local cardName = line:match('"card":"(.-)"') or 'Unknown'
-                  local errMsg = line:match('"error":"(.-)"') or 'Unknown error'
-                  Player[qTbl.color].broadcast('Failed: ' .. cardName .. ' (' .. errMsg .. ')', {1,0.5,0})
-                else
+                if not line:find('"error"') then
                   lineIndex = lineIndex + 1
-                  
                   -- Skip the first result (main card), spawn everything else (tokens)
                   if lineIndex > 1 then
-                    local cardData = safeJSON(line)
-                    if cardData then
-                      local obj = spawnObjectJSON({json = line})
-                      if obj then
-                        spawnCount = spawnCount + 1
-                        -- Extract token info for caching
-                        if cardData.Nickname then
-                          local cleanTokenName = cardData.Nickname:match("([^\n]+)") or cardData.Nickname
-                          local tokenInfo = {
-                            name = cleanTokenName,
-                            set = "TOKEN",
-                            collector = "1"
-                          }
-                          table.insert(tokenData, tokenInfo)
-                        end
-                      end
-                    end
+                    spawnObjectJSON({json = line})
                   end
                 end
-              end
-              
-              -- Cache token data to source card tags
-              if #tokenData > 0 and qTbl.target then
-                Wait.time(function()
-                  pcall(function()
-                    if not qTbl.target or qTbl.target.isDestroyed() then return end
-                    local existingTags = qTbl.target.getTags()
-                    local newTags = {}
-                    
-                    -- Keep non-token tags
-                    for _, tag in ipairs(existingTags) do
-                      if not tag:find("^token:") then
-                        table.insert(newTags, tag)
-                      end
-                    end
-                    
-                    -- Add new token tags
-                    for _, token in ipairs(tokenData) do
-                      table.insert(newTags, "token:" .. token.name .. ":" .. token.set .. ":" .. token.collector)
-                    end
-                    
-                    qTbl.target.setTags(newTags)
-                  end)
-                end, 0.5)
-              end
-              
-              if errorCount > 0 then
-                Player[qTbl.color].broadcast('Some cards failed to spawn', {1,0.5,0})
               end
               endLoop()
           end)
           return
         end
         
-        -- Process primary endpoint response - skip first result (main card), spawn rest (tokens)
-        local spawnCount = 0
-        local errorCount = 0
-        local tokenData = {} -- For caching
         local lineIndex = 0
-        
         for line in wr.text:gmatch("[^\r\n]+") do
-          if line:find('"error"') then
-            errorCount = errorCount + 1
-            local cardName = line:match('"card":"(.-)"') or 'Unknown'
-            local errMsg = line:match('"error":"(.-)"') or 'Unknown error'
-            Player[qTbl.color].broadcast('Failed: ' .. cardName .. ' (' .. errMsg .. ')', {1,0.5,0})
-          else
+          if not line:find('"error"') then
             lineIndex = lineIndex + 1
-            
             -- Skip the first result (main card), spawn everything else (tokens)
             if lineIndex > 1 then
-              local cardData = safeJSON(line)
-              if cardData then
-                local obj = spawnObjectJSON({json = line})
-                if obj then
-                  spawnCount = spawnCount + 1
-                  -- Extract token info for caching
-                  if cardData.Nickname then
-                    local cleanTokenName = cardData.Nickname:match("([^\n]+)") or cardData.Nickname
-                    local tokenInfo = {
-                      name = cleanTokenName,
-                      set = "TOKEN",
-                      collector = "1"
-                    }
-                    table.insert(tokenData, tokenInfo)
-                  end
-                end
-              end
+              spawnObjectJSON({json = line})
             end
           end
-        end
-        
-        -- Cache token data to source card tags
-        if #tokenData > 0 and qTbl.target then
-          Wait.time(function()
-            pcall(function()
-              if not qTbl.target or qTbl.target.isDestroyed() then return end
-              local existingTags = qTbl.target.getTags()
-              local newTags = {}
-              
-              -- Keep non-token tags
-              for _, tag in ipairs(existingTags) do
-                if not tag:find("^token:") then
-                  table.insert(newTags, tag)
-                end
-              end
-              
-              -- Add new token tags
-              for _, token in ipairs(tokenData) do
-                table.insert(newTags, "token:" .. token.name .. ":" .. token.set .. ":" .. token.collector)
-              end
-              
-              qTbl.target.setTags(newTags)
-            end)
-          end, 0.5)
-        end
-        
-        if errorCount > 0 then
-          Player[qTbl.color].broadcast('Some cards failed to spawn', {1,0.5,0})
         end
         endLoop()
     end)
