@@ -2,7 +2,7 @@
 --Heavily adapted by Pie to his table https://steamcommunity.com/sharedfiles/filedetails/?id=2296042369
 --Further updated by Vokerr to use rikrassen's server as the backend https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998
 
-mod_name,version='Card Importer',4.2
+mod_name,version='Card Importer',4.3
 self.setName('[854FD9]'..mod_name..' [49D54F]'..version)
 author,WorkshopID,GITURL='76561198045776458','https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998','https://raw.githubusercontent.com/MrVokerr/MTG-TTS-stuff/main/Scripts/Card%20Importer.lua'
 coauthor='76561197968157267'--PIE
@@ -58,31 +58,44 @@ function RikksanSpawn(lines, qTbl, useNewEndpoint, skipTokens)
   local playerBack = Back[qTbl.player]
   if not playerBack or playerBack == '' then playerBack = Back['___'] end
 
-  -- Helper to enforce vector structure {x=, y=, z=} which the backend likely expects
+  -- Helper to enforce vector structure {x=, y=, z=}
   local function toVector(v)
     if not v then return {x=0, y=0, z=0} end
-    if type(v) ~= 'table' then return {x=0, y=0, z=0} end
-    if v.x and v.y and v.z then return v end
-    return {x=v[1] or 0, y=v[2] or 0, z=v[3] or 0}
+    if v.x and v.y and v.z then return {x=v.x, y=v.y, z=v.z} end
+    if type(v) == 'table' then return {x=v[1] or 0, y=v[2] or 0, z=v[3] or 0} end
+    return {x=0, y=0, z=0}
   end
 
-  -- Fix Height and Rotation Logic
-  local pos = toVector(qTbl.position or self.getPosition())
+  -- Calculate Spawn Position and Rotation
+  local spawnPos, spawnRot
   
-  -- Spawn right next to the source card - don't modify Y (height)
-  pos.x = pos.x + 5
-  pos.z = pos.z - 10.2
+  if qTbl.target then
+    -- Spawn relative to target card: -2.5 units to the right (Local X)
+    spawnPos = qTbl.target.positionToWorld({-2.5, 0.5, 0})
+    spawnRot = qTbl.target.getRotation()
+  else
+    local rawPos = qTbl.position or self.getPosition()
+    -- Ensure rawPos is a Vector for math
+    if type(rawPos) == 'table' and not rawPos.x then 
+       rawPos = Vector(rawPos[1] or 0, rawPos[2] or 0, rawPos[3] or 0) 
+    end
+    spawnPos = rawPos + Vector(2, 0.5, 0)
+    local yRot = 0
+    if Player[qTbl.color] then yRot = Player[qTbl.color].getPointerRotation() end
+    spawnRot = Vector(0, yRot, 0)
+  end
 
   local payload = {
     url = '',
     data = dataStr,
     backURL = playerBack,
     useStates = true,
+    -- Send neutral transform to backend; we override pos/rot in spawnObjectJSON
     hand = {
-      position = pos,
-      forward = toVector({0, 0, 1}),
-      right = toVector({1, 0, 0}),
-      up = toVector({0, 1, 0})
+      position = {x=0, y=0, z=0},
+      forward = {x=0, y=0, z=1},
+      right = {x=1, y=0, z=0},
+      up = {x=0, y=1, z=0}
     }
   }
 
@@ -120,18 +133,13 @@ function RikksanSpawn(lines, qTbl, useNewEndpoint, skipTokens)
             -- If skipTokens is true, only spawn first result (main card)
             -- Otherwise spawn everything
             if not skipTokens or lineIndex == 1 then
-              local obj = spawnObjectJSON({json = line})
-              -- Force Face Up (Z=0 in TTS is Face Up)
-              if obj then
-                 Wait.time(function()
-                    pcall(function()
-                      if obj and not obj.isDestroyed() then
-                        local currentRot = obj.getRotation()
-                        obj.setRotation({currentRot.x, currentRot.y, 0})
-                      end
-                    end)
-                 end, 0.3)
-              end
+              spawnObjectJSON({
+                  json = line,
+                  position = spawnPos,
+                  rotation = spawnRot
+              })
+              -- Stack subsequent objects slightly so they don't clip perfectly
+              spawnPos = spawnPos + Vector(0, 0.1, 0)
             end
          end
       end
@@ -995,16 +1003,22 @@ Importer=setmetatable({
     local playerBack = Back[qTbl.player]
     if not playerBack or playerBack == '' then playerBack = Back['___'] end
     
-    local function toVector(v)
-      if not v then return {x=0, y=0, z=0} end
-      if type(v) ~= 'table' then return {x=0, y=0, z=0} end
-      if v.x and v.y and v.z then return v end
-      return {x=v[1] or 0, y=v[2] or 0, z=v[3] or 0}
+    -- Calculate Spawn Position and Rotation
+    local spawnPos, spawnRot
+    if qTbl.target then
+       -- Spawn relative to target card: -2.5 units to the right (Local X)
+       spawnPos = qTbl.target.positionToWorld({-2.5, 0.5, 0})
+       spawnRot = qTbl.target.getRotation()
+    else
+       local rawPos = qTbl.position or self.getPosition()
+       if type(rawPos) == 'table' and not rawPos.x then 
+          rawPos = Vector(rawPos[1] or 0, rawPos[2] or 0, rawPos[3] or 0) 
+       end
+       spawnPos = rawPos + Vector(2, 0.5, 0)
+       local yRot = 0
+       if Player[qTbl.color] then yRot = Player[qTbl.color].getPointerRotation() end
+       spawnRot = Vector(0, yRot, 0)
     end
-    
-    local pos = toVector(qTbl.position or self.getPosition())
-    pos.x = pos.x + 5
-    pos.z = pos.z - 10.2
     
     -- Send card name to Rikrassen - it will return main card + tokens
     local payload = {
@@ -1012,16 +1026,36 @@ Importer=setmetatable({
       data = "1 " .. qTbl.name,
       backURL = playerBack,
       useStates = true,
+      -- Send neutral transform to backend
       hand = {
-        position = pos,
-        forward = toVector({0, 0, 1}),
-        right = toVector({1, 0, 0}),
-        up = toVector({0, 1, 0})
+        position = {x=0,y=0,z=0},
+        forward = {x=0,y=0,z=1},
+        right = {x=1,y=0,z=0},
+        up = {x=0,y=1,z=0}
       }
     }
     
     local payloadJson = JSON.encode(payload)
     local endpoint = 'https://importer.rikrassen.xyz/build'
+    
+    local function processResponse(wr)
+      local lineIndex = 0
+      for line in wr.text:gmatch("[^\r\n]+") do
+        if not line:find('"error"') then
+          lineIndex = lineIndex + 1
+          -- Skip the first result (main card), spawn everything else (tokens)
+          if lineIndex > 1 then
+            spawnObjectJSON({
+                json = line,
+                position = spawnPos,
+                rotation = spawnRot
+            })
+            spawnPos = spawnPos + Vector(0, 0.1, 0)
+          end
+        end
+      end
+      endLoop()
+    end
     
     WebRequest.custom(endpoint, 'POST', true, payloadJson, {
       ['Content-Type'] = 'application/json',
@@ -1038,33 +1072,11 @@ Importer=setmetatable({
                 endLoop()
                 return
               end
-              
-              local lineIndex = 0
-              for line in wr2.text:gmatch("[^\r\n]+") do
-                if not line:find('"error"') then
-                  lineIndex = lineIndex + 1
-                  -- Skip the first result (main card), spawn everything else (tokens)
-                  if lineIndex > 1 then
-                    spawnObjectJSON({json = line})
-                  end
-                end
-              end
-              endLoop()
+              processResponse(wr2)
           end)
           return
         end
-        
-        local lineIndex = 0
-        for line in wr.text:gmatch("[^\r\n]+") do
-          if not line:find('"error"') then
-            lineIndex = lineIndex + 1
-            -- Skip the first result (main card), spawn everything else (tokens)
-            if lineIndex > 1 then
-              spawnObjectJSON({json = line})
-            end
-          end
-        end
-        endLoop()
+        processResponse(wr)
     end)
   end,
 
