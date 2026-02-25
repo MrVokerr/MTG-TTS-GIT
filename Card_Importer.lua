@@ -2,7 +2,7 @@
 --Heavily adapted by Pie to his table https://steamcommunity.com/sharedfiles/filedetails/?id=2296042369
 --Further updated by Vokerr to use rikrassen's server as the backend https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998
 
-mod_name,version='Card Importer',4.3
+mod_name,version='Card Importer',4.4
 self.setName('[854FD9]'..mod_name..' [49D54F]'..version)
 author,WorkshopID,GITURL='76561198045776458','https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998','https://raw.githubusercontent.com/MrVokerr/MTG-TTS-stuff/main/Scripts/Card%20Importer.lua'
 coauthor='76561197968157267'--PIE
@@ -43,7 +43,7 @@ Back['___']='https://steamusercontent-a.akamaihd.net/ugc/1647720103762682461/35E
 --Scryfall API wrapper with proper headers
 function ScryfallGet(url, callback)
   WebRequest.custom(url, 'GET', true, nil, {
-    ['User-Agent'] = 'TTS-MTG-Card-Importer/3.2',
+    ['User-Agent'] = 'Vokerr-TTS-MTG-Card-Importer',
     ['Accept'] = 'application/json'
   }, callback)
 end
@@ -106,6 +106,7 @@ function RikksanSpawn(lines, qTbl, useNewEndpoint, skipTokens)
   
   WebRequest.custom(endpoint, 'POST', true, payloadJson, {
     ['Content-Type'] = 'application/json',
+    ['User-Agent'] = 'Vokerr-TTS-MTG-Card-Importer',
     ['X-Client-Version'] = '0.9.1'
   }, function(wr)
       if wr.is_error then
@@ -1059,12 +1060,14 @@ Importer=setmetatable({
     
     WebRequest.custom(endpoint, 'POST', true, payloadJson, {
       ['Content-Type'] = 'application/json',
+      ['User-Agent'] = 'Vokerr-TTS-MTG-Card-Importer',
       ['X-Client-Version'] = '0.9.1'
     }, function(wr)
         if wr.is_error then
           endpoint = 'https://importer-m7vpzqazfa-uc.a.run.app/build'
           WebRequest.custom(endpoint, 'POST', true, payloadJson, {
             ['Content-Type'] = 'application/json',
+            ['User-Agent'] = 'Vokerr-TTS-MTG-Card-Importer',
             ['X-Client-Version'] = '0.9.1'
           }, function(wr2)
               if wr2.is_error then
