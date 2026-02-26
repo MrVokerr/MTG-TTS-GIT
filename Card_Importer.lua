@@ -2,9 +2,9 @@
 --Heavily adapted by Pie to his table https://steamcommunity.com/sharedfiles/filedetails/?id=2296042369
 --Further updated by Vokerr to use rikrassen's server as the backend https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998
 
-mod_name,version='Card Importer',4.4
+mod_name,version='Card Importer',4.5
 self.setName('[854FD9]'..mod_name..' [49D54F]'..version)
-author,WorkshopID,GITURL='76561198045776458','https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998','https://raw.githubusercontent.com/MrVokerr/MTG-TTS-stuff/main/Scripts/Card%20Importer.lua'
+author,WorkshopID,GITURL='76561198045776458','https://steamcommunity.com/sharedfiles/filedetails/?id=3637045998','https://raw.githubusercontent.com/MrVokerr/MTG-TTS-GIT/refs/heads/main/Card_Importer.lua'
 coauthor='76561197968157267'--PIE
 lang='en'
 --[[Classes]]
