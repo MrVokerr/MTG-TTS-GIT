@@ -1393,7 +1393,6 @@ function onLoad(data)
   -- Ensure Back is always a valid table before TBL.new
   if type(Back) ~= 'table' then Back = {} end
   Back = TBL.new(Back)
-  self.createButton({label="+",click_function='registerModule',function_owner=self,position={0,0.2,-0.5},height=100,width=100,font_size=100,tooltip="Adds Oracle Look Up"})
   Usage=Usage:format(self.getName())
   uNotebook('SHelp',Usage)
   -- uNotebook('SData',self.script_state)   -- pieHere, remove the debug text popping into the notebook
